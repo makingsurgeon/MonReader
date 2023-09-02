@@ -331,60 +331,36 @@ class Classifier():
 ssl._create_default_https_context = ssl._create_unverified_context
 example_model = models.efficientnet_b7(pretrained=True)
 
-class TransferEffiNet(nn.Module):
+class Net(nn.Module):
     def __init__(self):
         super().__init__()
-        self.base_effi_net = models.efficientnet_b7(pretrained=True)
-        self.conv_model = self.get_conv_layers()
-        self.avg_pool = self.transition_layer()
-        self.fc_model = self.get_fc_layers()
-        self.activate_training_layers()
+        self.conv1 = nn.Conv2d(3, 6, 5)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(6, 16, 5)
+        self.fc1 = nn.Linear(16 * 53 * 53, 120)
+        self.fc2 = nn.Linear(120, 84)
+        self.fc3 = nn.Linear(84, 14)
 
-    def activate_training_layers(self):
-        for name, param in self.conv_model.named_parameters():
-            number = int(name.split('.')[1])
-            # for all layers except the last conv layer, set param.requires_grad = False
-            if number == 8:
-                param.requires_grad = True
-            else:
-                param.requires_grad = False
-                
-        for name, param in self.fc_model.named_parameters():
-            # for all of these layers set param.requires_grad as True
-            param.requires_grad = True
-
-    def get_conv_layers(self):
-        return self.base_effi_net.features
-
-    def transition_layer(self):
-        return self.base_effi_net.avgpool
-
-    def get_fc_layers(self):
-        return nn.Sequential(
-            nn.Dropout(p=0.5, inplace=False),
-            nn.Linear(in_features=2560, out_features=1024, bias=True),
-            nn.ReLU(inplace=True),
-            nn.Dropout(p=0.5, inplace=False),
-            nn.Linear(in_features=1024, out_features=512, bias=True),
-            nn.ReLU(inplace=True),
-            nn.Linear(in_features=512, out_features=2, bias=True),
-        )
-    
     def forward(self, x):
-        x = self.conv_model(x)   #call the conv layers
-        x = self.avg_pool(x)  #call the avg pool layer
-        x = torch.flatten(x, 1)
-        x = self.fc_model(x)  #call fully connected layers  
-        
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = torch.flatten(x, 1) # flatten all dimensions except batch
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
         return x
+
+
+net = Net()
+net.to(device)
     
-name = 'TransferEffiNet'
+name = 'CNN'
 classes = [i for i in range(2)]
 transforms = get_transform('effinet')
 dataloaders = {'train_image_paths': train_image_paths, 'train_labels' : train_labels, 'valid_image_paths': valid_image_paths, 'valid_labels':valid_labels, 'transforms':transforms}
 parameters = {'lr': 0.001, 'epochs' : 5, 'batch_size':32, 'shuffle':False, 'class_names':classes}
 
-model = TransferEffiNet()
+model = Net()
 classifier = Classifier(name, model, dataloaders, parameters, use_cuda=True)
 classifier.train()
 
@@ -435,7 +411,7 @@ def get_pred(model, train_transforms, batch_size, use_cuda=True):
     return l, pred, pr, processtime
 
 save_path = os.getcwd()
-best_effi = TransferEffiNet()
+best_effi = Net()
 best_effi.load_state_dict(torch.load(os.path.join(save_path, 'best.pt')))
 transforms = get_transform('effinet')
 batch_size = 32
