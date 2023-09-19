@@ -1,2 +1,2 @@
-# U9wJBTwfrUsa7noq
+# MonReader
 An algorithm to classify whether an image contains flipping page action or not.
